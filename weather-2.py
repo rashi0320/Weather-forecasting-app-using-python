@@ -1,0 +1,52 @@
+name: Upload wrf-python to PyPI
+on:
+  release:
+    types:
+      - published
+jobs:
+  test-build:
+    if: github.repository == 'NCAR/wrf-python'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      - name: Build tarball and wheels
+        run: |
+          python -m build
+      - name: Test the artifacts
+        run: |
+          python -m twine check dist/*
+  publish:
+    needs: test-build
+    if: startsWith(github.ref, 'refs/tags')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      - name: Build tarball and wheels
+        run: |
+          python -m build
+      - name: Test the artifacts
+        run: |
+          python -m twine check dist/*
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_WRF_PYTHON }}
+          skip_existing: true
+          verbose: true
