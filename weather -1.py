@@ -1,0 +1,58 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Daily “At 00:00”
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "ubuntu-latest", "macos-latest", "macos-14" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+      - name: environment setup
+        uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge
+          environment-file: build_envs/environment.yml
+      - name: build WRF-Python
+        run: |
+          python -m pip install build
+          python -m build .
+          python -m pip install dist/wrf*.whl
+      - name: run tests
+        run: |
+          cd test/ci_tests
+          python utests.py
+      - name: check import
+        if: failure()
+        run: |
+          python -m pip show wrf-python
+          python -m pip show --files wrf-python
+          prefix="$(python -m pip show --files wrf-python | grep Location: | cut -f2 -d" ")"
+          echo "Site-packages directory is ${prefix}"
+          cd "${prefix}"
+          installed_files="$(python -m pip show --files wrf-python | grep -v -E -e '^[-a-zA-Z]+:')"
+          ls -l ${installed_files}
+          file ${installed_files}
+          python -vvv -dd -c "import wrf"
+          ldd $(echo ${installed_files} | grep -F -v -e ".py" -e ".dist-info")
